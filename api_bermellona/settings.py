@@ -84,11 +84,12 @@ REST_FRAMEWORK = {
 }
 
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),  # Define la duración del token
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
-    'ROTATE_REFRESH_TOKENS': True,
-    'BLACKLIST_AFTER_ROTATION': True,
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),  # Token válido por 60 minutos
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=1),  # Token válido por 1 día
+    'ROTATE_REFRESH_TOKENS': True,  # Genera un nuevo refresh token al renovarlo
+    'BLACKLIST_AFTER_ROTATION': True,  # Blacklist del refresh token antiguo
 }
+
 
 TEMPLATES = [
     {
@@ -108,6 +109,10 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'api_bermellona.wsgi.application'
 
+CORS_ALLOW_HEADERS = [
+    'authorization',
+    'content-type',
+]
 
 # Database
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases

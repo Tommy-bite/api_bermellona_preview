@@ -1,0 +1,19 @@
+08:00 a 15:30
+15:30 a 23:00
+23:00 a 06:30
+
+
+cambiar servicios por reales
+listado mas extenso como 40
+intentar tener grafico al día
+preguntar por los puertos
+preguntar por los turnos tierra
+
+eliminar descargar histórico y generar resumen según filtros de fechas seleccionadas (INFORME EXCEL)
+
+Mostrar todos las costos asociados a la agencia, inspector a cargo y n° de referencia en la vista de 
+listar turnos según filtros de fechas al seleccionar todo
+
+Condicionar el gasto general según filtros seleccionados
+
+

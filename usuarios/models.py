@@ -89,3 +89,27 @@ class TransaccionWebpay(models.Model):
 
     def __str__(self):
         return f"Transacción {self.token} - {self.estado}"
+    
+class UserProfile(models.Model):
+    usuario = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
+    celular = models.CharField(max_length=15, blank=True, null=True)
+    region = models.TextField(blank=True, null=True)
+    comuna = models.TextField(blank=True, null=True)
+    calle = models.TextField(blank=True, null=True)
+
+    class Meta:
+        db_table = 'perfil_usuario'
+
+    def __str__(self):
+        return self.user.username
+    
+class Soporte(models.Model):
+    nombre = models.CharField(max_length=255)
+    correo_electronico = models.EmailField()
+    motivo = models.CharField(max_length=255)
+    mensaje = models.TextField()
+    estado = models.CharField(max_length=50)
+
+    class Meta:
+        db_table = 'soporte'
+

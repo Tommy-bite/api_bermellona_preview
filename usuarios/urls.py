@@ -1,9 +1,11 @@
 from django.urls import include, path
-from .views import ConfirmarPagoView, IniciarPagoView, ProductoViewSet, RegistroUsuario, activate_account, LoginView, UserProfileView, PasswordResetView, PasswordResetConfirmView, csrf_view
+from .views import ConfirmarPagoView, GoogleAuthView, SoporteViewSet,IniciarPagoView, PasswordResetRequestView, ProductoViewSet, RegistroUsuario, ToggleUserStatusView, UserListView, activate_account, LoginView, UserProfileView, PasswordResetView, PasswordResetConfirmView, csrf_view
 from rest_framework.routers import DefaultRouter
+
 
 router = DefaultRouter()
 router.register(r'productos', ProductoViewSet, basename='producto')
+router.register(r'soporte', SoporteViewSet, basename='soporte')
 
 urlpatterns = [
     path('', include(router.urls)),
@@ -16,4 +18,9 @@ urlpatterns = [
     path('webpay/iniciar-pago/', IniciarPagoView.as_view(), name='iniciar_pago'),
     path('webpay/confirmar-pago/<str:token>/', ConfirmarPagoView.as_view(), name='confirmar-pago'),
     path('csrf/', csrf_view, name='csrf'),
+    path('lista-usuarios/', UserListView.as_view(), name='user-list'),
+    path('toggle-user-status/', ToggleUserStatusView.as_view(), name='toggle-user-status'),
+    path('password-reset-request/', PasswordResetRequestView.as_view(), name='password-reset-request'),
+    path('auth/google/', GoogleAuthView.as_view(), name='google-auth'),
+
 ]
