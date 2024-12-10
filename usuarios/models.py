@@ -48,8 +48,12 @@ class Venta(models.Model):
     valor_total = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="Valor total de la venta")
     estado = models.CharField(default='Pendiente', max_length=255)
     tokenWebpay = models.TextField(null=True)
+    metodo_pago = models.CharField(max_length=255, blank=True)
 
     usuario = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Usuario asociado")
+    numero_envio = models.CharField(max_length=255, blank=True, null=True, verbose_name="Número de Envío")
+    despachador = models.CharField(max_length=255, blank=True, null=True, verbose_name="Despachador")
+
 
     class Meta:
         db_table = 'ventas'

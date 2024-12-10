@@ -1,5 +1,5 @@
 from django.urls import include, path
-from .views import ConfirmarPagoView, GoogleAuthView, UserProfileDetailView, GuardarVentaView,TransaccionWebpayViewSet,SoporteViewSet,IniciarPagoView, PasswordResetRequestView, ProductoViewSet, RegistroUsuario, ToggleUserStatusView, UserListView, activate_account, LoginView, UserProfileView, PasswordResetView, PasswordResetConfirmView, csrf_view
+from .views import ConfirmarPagoView, GoogleAuthView, SoporteEstadoUpdateView, UserProfileDetailView, GuardarVentaView,TransaccionWebpayViewSet,SoporteViewSet,IniciarPagoView, PasswordResetRequestView, ProductoViewSet, RegistroUsuario, ToggleUserStatusView, UserListView, VentaEstadoUpdateView, VentaListView, VentasPorClienteView, activate_account, LoginView, UserProfileView, PasswordResetView, PasswordResetConfirmView, csrf_view
 from rest_framework.routers import DefaultRouter
 
 
@@ -25,5 +25,8 @@ urlpatterns = [
     path('auth/google/', GoogleAuthView.as_view(), name='google-auth'),
     path('user-profile/<int:user_id>/', UserProfileDetailView.as_view(), name='user-profile-detail'),
     path('guardar-venta/', GuardarVentaView.as_view(), name='guardar-eventa'),
-
+    path('ventas/', VentaListView.as_view(), name='venta-list'),
+    path('ventas/<int:pk>/', VentaEstadoUpdateView.as_view(), name='actualizar-estado-venta'),
+    path('ventas/cliente/<int:cliente_id>/', VentasPorClienteView.as_view(), name='ventas-por-cliente'),
+    path('soporte/<int:pk>/actualizar-estado/', SoporteEstadoUpdateView.as_view(), name='soporte-actualizar-estado'),
 ]

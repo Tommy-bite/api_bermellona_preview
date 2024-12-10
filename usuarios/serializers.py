@@ -1,5 +1,5 @@
 from django.contrib.auth.models import User
-from .models import Productos, TerminosYCondiciones, UserProfile, Soporte, TransaccionWebpay
+from .models import ProductoVenta, Productos, TerminosYCondiciones, UserProfile, Soporte, TransaccionWebpay, Venta
 from rest_framework import serializers
 from django.core.mail import send_mail
 from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
@@ -143,11 +143,28 @@ class ProductoSerializer(serializers.ModelSerializer):
         model = Productos
         fields = '__all__'
 
+class ProductoVentaSerializer(serializers.ModelSerializer):
+    producto = ProductoSerializer()  # Anida información del producto
+
+    class Meta:
+        model = ProductoVenta
+        fields = ['producto', 'cantidad']  # Incluye el producto y la cantidad
+
 
 class UserProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = UserProfile
         fields = '__all__'
+
+class VentaConProductosSerializer(serializers.ModelSerializer):
+    productos = ProductoVentaSerializer(source='productoventa_set', many=True)  # Relación inversa
+
+    class Meta:
+        model = Venta
+        fields = ['id', 'codigo', 'fecha', 'rut_cliente', 'nombre_cliente', 'apellido_cliente',
+                  'email_cliente', 'opcion_entrega', 'region', 'comuna', 'calle', 'celular',
+                  'valor_total', 'estado', 'productos']
+
 
 class UserReadOnlySerializer(serializers.ModelSerializer):
     profile = UserProfileSerializer(read_only=True)  # Sin `source`
@@ -167,3 +184,41 @@ class TransaccionWebpaySerializer(serializers.ModelSerializer):
         model = TransaccionWebpay
         fields = '__all__'
 
+
+class VentaSerializer(serializers.ModelSerializer):
+
+    productos = serializers.SerializerMethodField()
+    class Meta:
+        model = Venta
+        fields = [
+            'id',
+            'codigo',
+            'fecha',
+            'rut_cliente',
+            'nombre_cliente',
+            'apellido_cliente',
+            'email_cliente',
+            'opcion_entrega',
+            'region',
+            'comuna',
+            'calle',
+            'celular',
+            'descuento',
+            'valor_total',
+            'estado',
+            'metodo_pago',
+            'productos',
+        ]
+
+    def get_productos(self, obj):
+        productos = ProductoVenta.objects.filter(venta=obj)
+        return ProductoVentaSerializer(productos, many=True).data
+
+
+class VentaEstadoSerializer(serializers.ModelSerializer):
+    numero_envio = serializers.CharField(required=False, allow_null=True, allow_blank=True)
+    despachador = serializers.CharField(required=False, allow_null=True, allow_blank=True)
+
+    class Meta:
+        model = Venta
+        fields = ['estado', 'numero_envio', 'despachador']

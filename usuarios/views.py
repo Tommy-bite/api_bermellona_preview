@@ -10,7 +10,7 @@ from django.shortcuts import redirect
 from django.template.loader import render_to_string
 
 from usuarios.models import ProductoVenta, Productos, Soporte, UserProfile, TransaccionWebpay, Venta
-from .serializers import GoogleRegisterSerializer, SoporteSerializer,LoginSerializer, TransaccionWebpaySerializer,ProductoSerializer, UserSerializer, PasswordResetSerializer, PasswordResetConfirmSerializer,UserReadOnlySerializer
+from .serializers import GoogleRegisterSerializer, SoporteSerializer,LoginSerializer, VentaConProductosSerializer, VentaEstadoSerializer, VentaSerializer, TransaccionWebpaySerializer,ProductoSerializer, UserSerializer, PasswordResetSerializer, PasswordResetConfirmSerializer,UserReadOnlySerializer
 from rest_framework.permissions import IsAuthenticated, IsAdminUser
 from django.utils.encoding import force_bytes
 from django.core.mail import send_mail
@@ -539,6 +539,7 @@ class GuardarVentaView(View):
                     estado=body.get('estado', 'pendiente'),
                     usuario=usuario,  # Será None si no se envía
                     tokenWebpay=body.get('tokenWebpay'),
+                    metodo_pago=body.get('forma_pago'),
                 )
                 productos_guardados = []
                 # Guardar los productos asociados a la venta
@@ -580,12 +581,27 @@ def obtener_url_absoluta_sin_request(ruta_relativa):
     if not ruta_relativa.startswith('/'):
         ruta_relativa = '/' + ruta_relativa
     return base_url + ruta_relativa
+
 def enviar_resumen_venta(venta, productos):
     """
     Envía un correo con el resumen de la venta al cliente.
     :param venta: Objeto de la venta
     :param productos: Lista de productos asociados
     """
+
+    info_transferencia = ""
+    if venta.metodo_pago == "transferencia":
+        info_transferencia = f"""
+        <h3>Información cuenta para transferir</h3>
+        <p>Recordar transferir el monto total, a la siguiente cuenta, para que podamos procesar tu solicitud.</p>
+        <p><strong>Banco:</strong>  Banco de Chile</p>
+        <p><strong>Tipo:</strong>Cuenta corriente</p>
+        <p><strong>Cuenta:</strong>123456789</p>
+        <p><strong>Rut:</strong>12.345.678-9</p>
+        <p><strong>Correo:</strong>pagos@bermellona.cl</p>
+        <p style="color: red"><strong>*IMPORTANTE: Recordar incluir el código de venta en los comentarios de la transferencia. </strong></p>
+        """
+
     # HTML para el correo
     correo_html = f"""
     <html>
@@ -597,19 +613,21 @@ def enviar_resumen_venta(venta, productos):
             <div style="text-align: left; margin-top: 20px;">
                 <p><strong>Código de Venta:</strong> {venta.codigo}</p>
                 <p><strong>Fecha:</strong> {venta.fecha.strftime('%d-%m-%Y %H:%M')}</p>
+                <p><strong>Método de pago:</strong> {venta.metodo_pago}</p>
                 <p><strong>Estado:</strong> EN PROCESO DE COMPROBACIÓN</p>
                 <p><strong>Total Pagado:</strong> ${venta.valor_total}</p>
+                {info_transferencia}
                 <h3 style="color: #333;">Productos:</h3>
                 <ul style="list-style: none; padding: 0;">
     """
 
     # Agregar los productos al correo
     for producto in productos:
-        url_imagen = obtener_url_absoluta_sin_request( producto.producto.imagen.url)
+
         correo_html += f"""
         <li style="margin-bottom: 10px; padding: 10px; background-color: #f1f1f1; border-radius: 4px;">
             <div style="display: flex; align-items: center; gap: 10px;">
-                <img src="{url_imagen}" width="60">
+                <img src="https://i.ibb.co/XY3cY4J/image11.jpg" alt="{producto.producto.nombre}" width="60">
                 <div>
                     <p><strong>{producto.producto.nombre}</strong></p>
                     <p>Precio Unitario: ${producto.producto.precio}</p>
@@ -626,7 +644,7 @@ def enviar_resumen_venta(venta, productos):
     correo_html += """
                 </ul>
             </div>
-            <p style="margin-top: 20px; color: #555;">Recibiras mas actualizaciones como esté  cuando el estado de tu compra cambie.</p>
+            <p style="margin-top: 20px; color: #555;">Recibirás más actualizaciones como este cuando el estado de tu compra cambie.</p>
             <p style="margin-top: 20px; color: #555;">Gracias por confiar en nosotros.</p>
         </div>
     </body>
@@ -646,3 +664,166 @@ def enviar_resumen_venta(venta, productos):
         print("Correo enviado exitosamente.")
     except Exception as e:
         print(f"Error al enviar el correo: {e}")
+
+
+class VentaListView(ListAPIView):
+    queryset = Venta.objects.all()
+    serializer_class = VentaSerializer
+
+
+class VentaEstadoUpdateView(APIView):
+    def patch(self, request, pk):
+        try:
+            venta = Venta.objects.get(pk=pk)
+            serializer = VentaEstadoSerializer(venta, data=request.data, partial=True)
+
+            if serializer.is_valid():
+                serializer.save()
+
+                # Enviar correo
+                productos = ProductoVenta.objects.filter(venta=venta)
+                enviar_cambia_estado(venta, productos)
+
+                return Response({'message': 'Estado actualizado y correo enviado.'}, status=status.HTTP_200_OK)
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        except Venta.DoesNotExist:
+            return Response({'error': 'Venta no encontrada.'}, status=status.HTTP_404_NOT_FOUND)
+
+        
+def enviar_cambia_estado(venta, productos):
+    # Información adicional si el estado es "En despacho"
+    envio_info = ""
+    if venta.estado == "En despacho" and venta.numero_envio and venta.despachador:
+        envio_info = f"""
+        <h3>Información del Envío</h3>
+        <p><strong>Número de Envío:</strong> {venta.numero_envio}</p>
+        <p><strong>Despachador:</strong> {venta.despachador}</p>
+        <p>Recuerde verificar el estado de su envio y el cobro por recibirlo, en la pagina de seguimiento del despachador.</p>
+        """
+
+
+    correo_html = f"""
+    <html>
+    <body style="font-family: Arial, sans-serif; text-align: center; background-color: #f9f9f9; padding: 20px;">
+        <div style="max-width: 600px; margin: auto; background-color: #ffffff; border-radius: 8px; box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.1); padding: 20px;">
+            <img src="https://i.ibb.co/FzPs1mR/logo.png" width="80">
+            <h2 style="color: #333;">Estado actualizado de tu compra</h2>
+            <p style="color: #555;">¡Hola, {venta.nombre_cliente}!</p>
+            <p>Tu estado de compra ha cambiado a: <strong>{venta.estado}</strong></p>
+            <p><strong>Código de Venta:</strong> {venta.codigo}</p>
+            <p><strong>Total Pagado:</strong> ${venta.valor_total}</p>
+            {envio_info}
+            <h3 style="color: #333;">Productos:</h3>
+            <ul style="list-style: none; padding: 0;">
+    """
+
+    for producto in productos:
+        correo_html += f"""
+        <li style="margin-bottom: 10px; padding: 10px; background-color: #f1f1f1; border-radius: 4px;">
+            <div style="text-align: left;">
+                <p><strong>{producto.producto.nombre}</strong></p>
+                <p>Precio Unitario: ${producto.producto.precio}</p>
+                <p>Cantidad: {producto.cantidad}</p>
+                <p><strong>Total: ${producto.cantidad * producto.producto.precio}</strong></p>
+            </div>
+        </li>
+        <hr>
+        """
+
+    correo_html += """
+                </ul>
+                <p style="margin-top: 20px; color: #555;">Recibirás más actualizaciones cuando el estado de tu compra cambie.</p>
+                <p style="margin-top: 20px; color: #555;">Gracias por confiar en nosotros.</p>
+            </div>
+        </div>
+    </body>
+    </html>
+    """
+
+    send_mail(
+        subject=f'Actualización de tu compra - {venta.codigo}',
+        message='',  # Se deja vacío porque usamos html_message
+        from_email='tomi.latin.99@gmail.com',  # Cambiar al correo configurado
+        recipient_list=[venta.email_cliente],
+        html_message=correo_html,
+        fail_silently=False,
+    )
+
+class VentasPorClienteView(APIView):
+    """
+    Devuelve las ventas asociadas a un cliente junto con los productos de cada venta.
+    """
+
+    def get(self, request, cliente_id):
+        try:
+            # Filtrar ventas por usuario asociado
+            ventas = Venta.objects.filter(usuario_id=cliente_id)
+
+            if not ventas.exists():
+                return Response(
+                    {"message": "No se encontraron ventas para este cliente."},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+
+            # Serializar los datos incluyendo productos
+            serializer = VentaConProductosSerializer(ventas, many=True)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response(
+                {"error": str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class SoporteEstadoUpdateView(APIView):
+    def patch(self, request, pk):
+        try:
+            soporte = Soporte.objects.get(pk=pk)
+            nuevo_estado = request.data.get('estado')
+            mensaje_resolucion = request.data.get('mensaje_resolucion')
+
+            if not nuevo_estado or not mensaje_resolucion:
+                return Response(
+                    {'error': 'Debe proporcionar el estado y el mensaje de resolución.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Actualizar estado
+            soporte.estado = nuevo_estado
+            soporte.save()
+
+            # HTML para el correo al cliente
+            cliente_html_message = f"""
+            <html>
+            <body style="font-family: Arial, sans-serif; text-align: center; background-color: #f9f9f9; padding: 20px;">
+                <div style="max-width: 600px; margin: auto; background-color: #ffffff; border-radius: 8px; box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.1); padding: 20px;">
+                    <img src="https://i.ibb.co/FzPs1mR/logo.png" width="80">
+                    <h2 style="color: #333;">Actualización de Soporte</h2>
+                    <p style="color: #555;">El estado de su ticket de soporte ha sido actualizado:</p>
+                    <div style="text-align: left; margin-top: 20px;">
+                        <p><strong>N° Ticket:</strong> {soporte.codigo}</p>
+                        <p><strong>Estado:</strong> {soporte.estado}</p>
+                        <p><strong>Mensaje de Resolución:</strong></p>
+                        <p style="background-color: #f1f1f1; padding: 10px; border-radius: 4px;">{mensaje_resolucion}</p>
+                    </div>
+                </div>
+            </body>
+            </html>
+            """
+
+            # Enviar correo al cliente
+            send_mail(
+                subject=f'Actualización de Soporte - Ticket {soporte.codigo}',
+                message='',  # Se deja vacío porque usamos html_message
+                from_email='cri.jimenez21@gmail.com',  # Correo desde el que se enviará
+                recipient_list=[soporte.correo_electronico],
+                html_message=cliente_html_message,
+                fail_silently=False,
+            )
+
+            return Response({'message': 'Estado actualizado y correo enviado al cliente.'}, status=status.HTTP_200_OK)
+
+        except Soporte.DoesNotExist:
+            return Response({'error': 'Soporte no encontrado.'}, status=status.HTTP_404_NOT_FOUND)
