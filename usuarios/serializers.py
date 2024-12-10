@@ -1,5 +1,5 @@
 from django.contrib.auth.models import User
-from .models import Productos, TerminosYCondiciones, UserProfile, Soporte
+from .models import Productos, TerminosYCondiciones, UserProfile, Soporte, TransaccionWebpay
 from rest_framework import serializers
 from django.core.mail import send_mail
 from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
@@ -16,7 +16,7 @@ class UserSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ['username', 'password', 'email', 'first_name', 'last_name', 'is_admin', 'acepto_terminos']
+        fields = ['id','username', 'password', 'email', 'first_name', 'last_name', 'is_admin', 'acepto_terminos']
         extra_kwargs = {'password': {'write_only': True}}
 
     def get_is_admin(self, obj):
@@ -149,9 +149,8 @@ class UserProfileSerializer(serializers.ModelSerializer):
         model = UserProfile
         fields = '__all__'
 
-
 class UserReadOnlySerializer(serializers.ModelSerializer):
-    profile = UserProfileSerializer()
+    profile = UserProfileSerializer(read_only=True)  # Sin `source`
 
     class Meta:
         model = User
@@ -161,5 +160,10 @@ class UserReadOnlySerializer(serializers.ModelSerializer):
 class SoporteSerializer(serializers.ModelSerializer):
     class Meta:
         model = Soporte
+        fields = '__all__'
+
+class TransaccionWebpaySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TransaccionWebpay
         fields = '__all__'
 

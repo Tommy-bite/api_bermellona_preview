@@ -7,9 +7,10 @@ from django.contrib.auth.models import User
 from django.utils.http import urlsafe_base64_decode,urlsafe_base64_encode
 from django.contrib.auth.tokens import default_token_generator
 from django.shortcuts import redirect
+from django.template.loader import render_to_string
 
-from usuarios.models import Productos, Soporte
-from .serializers import GoogleRegisterSerializer, SoporteSerializer,LoginSerializer, ProductoSerializer, UserSerializer, PasswordResetSerializer, PasswordResetConfirmSerializer,UserReadOnlySerializer
+from usuarios.models import ProductoVenta, Productos, Soporte, UserProfile, TransaccionWebpay, Venta
+from .serializers import GoogleRegisterSerializer, SoporteSerializer,LoginSerializer, TransaccionWebpaySerializer,ProductoSerializer, UserSerializer, PasswordResetSerializer, PasswordResetConfirmSerializer,UserReadOnlySerializer
 from rest_framework.permissions import IsAuthenticated, IsAdminUser
 from django.utils.encoding import force_bytes
 from django.core.mail import send_mail
@@ -19,7 +20,10 @@ from django.views import View
 from django.http import JsonResponse
 import json
 from django.middleware.csrf import get_token
-
+from django.utils.decorators import method_decorator
+from django.db import transaction
+import uuid
+from base64 import b64encode
 
 from rest_framework.generics import ListAPIView
 
@@ -29,6 +33,7 @@ from rest_framework.decorators import action
 
 logger = logging.getLogger(__name__)
 from rest_framework_simplejwt.tokens import RefreshToken
+from django.views.decorators.csrf import csrf_exempt
 
 
 class RegistroUsuario(generics.CreateAPIView):
@@ -110,16 +115,35 @@ class PasswordResetView(APIView):
         reset_link = f"http://localhost:4200/password-reset-confirm/{uid}/{token}"
         print(f"Enlace generado: {reset_link}")
 
-        # Enviar el correo
+        html_message = f"""
+            <html>
+            <body style="font-family: Arial, sans-serif; text-align: center; background-color: #f9f9f9; padding: 20px;">
+                <div style="max-width: 600px; margin: auto; background-color: #ffffff; border-radius: 8px; box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.1); padding: 20px;">
+                    <img src="https://i.ibb.co/FzPs1mR/logo.png" width="80">
+                    <h2 style="color: #333;">Restauración de Contraseña</h2>
+                    <p style="color: #555;">Hola,</p>
+                    <p style="color: #555;">Hemos recibido una solicitud para restaurar tu contraseña. Si no realizaste esta solicitud, ignora este correo.</p>
+                    <p style="color: #555;">Haz clic en el botón de abajo para restaurar tu contraseña:</p>
+                    <a href="{reset_link}" 
+                    style="display: inline-block; background-color: #007bff; color: #ffffff; padding: 10px 20px; text-decoration: none; border-radius: 4px; margin-top: 20px; font-weight: bold;">
+                    Restaurar Contraseña
+                    </a>
+                    <p style="margin-top: 20px; color: #555;">Este enlace es válido por 24 horas.</p>
+                    <p style="color: #555;">Si el botón no funciona, copia y pega el siguiente enlace en tu navegador:</p>
+                    <p style="color: #007bff; word-wrap: break-word;">{reset_link}</p>
+                    <p style="margin-top: 20px; color: #333;"><strong>Saludos,<br>Bermellona Accesorios</strong></p>
+                </div>
+            </body>
+            </html>
+            """
         try:
+            # Enviar correo
             send_mail(
-                subject='Recuperación de contraseña',
-                message=(
-                    f'Hola, {user.first_name}. '
-                    f'Haz clic en el siguiente enlace para recuperar tu contraseña: {reset_link}'
-                ),
-                from_email='noreply@example.com',
+                subject="Restauración de contraseña",
+                message="",
+                from_email="noreply@example.com",
                 recipient_list=[email],
+                html_message=html_message,
                 fail_silently=False,
             )
         except Exception as e:
@@ -320,12 +344,36 @@ class PasswordResetRequestView(APIView):
         reset_link = f"http://localhost:4200/password-reset-confirm/{uid}/{token}"
 
         # Enviar el correo
+
+        html_message = f"""
+            <html>
+            <body style="font-family: Arial, sans-serif; text-align: center; background-color: #f9f9f9; padding: 20px;">
+                <div style="max-width: 600px; margin: auto; background-color: #ffffff; border-radius: 8px; box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.1); padding: 20px;">
+                    <img src="https://i.ibb.co/FzPs1mR/logo.png" width="80">
+                    <h2 style="color: #333;">Restauración de Contraseña</h2>
+                    <p style="color: #555;">Hola,</p>
+                    <p style="color: #555;">Hemos recibido una solicitud para restaurar tu contraseña. Si no realizaste esta solicitud, ignora este correo.</p>
+                    <p style="color: #555;">Haz clic en el botón de abajo para restaurar tu contraseña:</p>
+                    <a href="{reset_link}" 
+                    style="display: inline-block; background-color: #007bff; color: #ffffff; padding: 10px 20px; text-decoration: none; border-radius: 4px; margin-top: 20px; font-weight: bold;">
+                    Restaurar Contraseña
+                    </a>
+                    <p style="margin-top: 20px; color: #555;">Este enlace es válido por 24 horas.</p>
+                    <p style="color: #555;">Si el botón no funciona, copia y pega el siguiente enlace en tu navegador:</p>
+                    <p style="color: #007bff; word-wrap: break-word;">{reset_link}</p>
+                    <p style="margin-top: 20px; color: #333;"><strong>Saludos,<br>Bermellona Accesorios</strong></p>
+                </div>
+            </body>
+            </html>
+            """
         try:
+            # Enviar correo
             send_mail(
                 subject="Restauración de contraseña",
-                message=f"Haz clic en el siguiente enlace para restaurar tu contraseña: {reset_link}",
+                message="",
                 from_email="noreply@example.com",
                 recipient_list=[email],
+                html_message=html_message,
                 fail_silently=False,
             )
         except Exception as e:
@@ -378,29 +426,223 @@ class SoporteViewSet(ModelViewSet):
         # Guarda la instancia del soporte
         soporte = serializer.save()
 
+        # HTML para el correo del administrador
+        admin_html_message = f"""
+        <html>
+        <body style="font-family: Arial, sans-serif; text-align: center; background-color: #f9f9f9; padding: 20px;">
+            <div style="max-width: 600px; margin: auto; background-color: #ffffff; border-radius: 8px; box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.1); padding: 20px;">
+                <img src="https://i.ibb.co/FzPs1mR/logo.png" width="80">
+                <h2 style="color: #333;">Nuevo Requerimiento de Soporte</h2>
+                <p style="color: #555;">Un nuevo requerimiento de soporte ha sido enviado con los siguientes detalles:</p>
+                <div style="text-align: left; margin-top: 20px;">
+                    <p><strong>N° Ticket:</strong> {soporte.codigo}</p>
+                    <p><strong>Nombre:</strong> {soporte.nombre}</p>
+                    <p><strong>Correo:</strong> {soporte.correo_electronico}</p>
+                    <p><strong>Motivo:</strong> {soporte.motivo}</p>
+                    <p><strong>Mensaje:</strong></p>
+                    <p style="background-color: #f1f1f1; padding: 10px; border-radius: 4px;">{soporte.mensaje}</p>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+
         # Enviar correo al administrador
         send_mail(
             subject='Nuevo requerimiento de soporte',
-            message=f'Un nuevo requerimiento de soporte ha sido enviado:\n\n'
-                    f'Nombre: {soporte.nombre}\n'
-                    f'Correo: {soporte.correo_electronico}\n'
-                    f'Motivo: {soporte.motivo}\n'
-                    f'Mensaje: {soporte.mensaje}\n',
+            message='',  # Se deja vacío porque usamos html_message
             from_email='cri.jimenez21@gmail.com',  # Correo desde el que se enviará
             recipient_list=['cri.jimenez24@gmail.com'],  # Correo del administrador
+            html_message=admin_html_message,
             fail_silently=False,
         )
+
+        # HTML para el correo del usuario
+        user_html_message = f"""
+        <html>
+        <body style="font-family: Arial, sans-serif; text-align: center; background-color: #f9f9f9; padding: 20px;">
+            <div style="max-width: 600px; margin: auto; background-color: #ffffff; border-radius: 8px; box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.1); padding: 20px;">
+                <img src="https://i.ibb.co/FzPs1mR/logo.png" width="80">
+                <h2 style="color: #333;">Confirmación de Recepción de Soporte</h2>
+                <p style="color: #555;">Hola {soporte.nombre},</p>
+                <p style="color: #555;">Hemos recibido tu solicitud de soporte con el siguiente detalle:</p>
+                <div style="text-align: left; margin-top: 20px;">
+                    <p><strong>N° Ticket:</strong> {soporte.codigo}</p>
+                    <p><strong>Motivo:</strong> {soporte.motivo}</p>
+                    <p><strong>Mensaje:</strong></p>
+                    <p style="background-color: #f1f1f1; padding: 10px; border-radius: 4px;">{soporte.mensaje}</p>
+                </div>
+                <p style="margin-top: 20px; color: #555;">Pronto nos pondremos en contacto contigo. Gracias.</p>
+                <p style="color: #333;"><strong>Saludos cordiales,<br>Bermellona Accesorios</strong></p>
+            </div>
+        </body>
+        </html>
+        """
 
         # Enviar correo al usuario que llenó el formulario
         send_mail(
             subject='Confirmación de recepción de soporte',
-            message=f'Hola {soporte.nombre},\n\n'
-                    f'Hemos recibido tu solicitud de soporte con el siguiente detalle:\n\n'
-                    f'Motivo: {soporte.motivo}\n'
-                    f'Mensaje: {soporte.mensaje}\n\n'
-                    f'Pronto nos pondremos en contacto contigo. Gracias.\n\n'
-                    f'Saludos cordiales, Bermellona Accesorios',
+            message='',  # Se deja vacío porque usamos html_message
             from_email='tu_correo@gmail.com',  # Correo desde el que se enviará
             recipient_list=[soporte.correo_electronico],  # Correo del solicitante
+            html_message=user_html_message,
             fail_silently=False,
         )
+
+
+class UserProfileDetailView(APIView):
+    """
+    Vista para obtener el perfil del usuario basado en el identificador pasado.
+    """
+
+    def get(self, request, user_id):
+        try:
+            # Obtén el usuario basado en el ID proporcionado
+            user = User.objects.get(id=user_id)
+            # Serializa los datos del usuario
+            serializer = UserReadOnlySerializer(user)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        except User.DoesNotExist:
+            return Response({"error": "Usuario no encontrado."}, status=status.HTTP_404_NOT_FOUND)
+
+
+class TransaccionWebpayViewSet(ModelViewSet):
+    queryset = TransaccionWebpay.objects.all()
+    serializer_class = TransaccionWebpaySerializer
+
+@method_decorator(csrf_exempt, name='dispatch')
+class GuardarVentaView(View):
+    def post(self, request, *args, **kwargs):
+        try:
+            # Parsear los datos del cuerpo de la solicitud
+            body = json.loads(request.body)
+
+            # Extraer datos principales
+            usuario_id = body.get('usuario')
+            usuario = User.objects.get(id=usuario_id) if usuario_id else None  # Manejar caso de usuario=None
+
+            # Crear la venta
+            with transaction.atomic():
+                venta = Venta.objects.create(
+                    codigo = f"VENTA-{uuid.uuid4().hex[:8].upper()}",
+                    rut_cliente=body.get('rut_cliente'),
+                    nombre_cliente=body.get('nombre_cliente'),
+                    apellido_cliente=body.get('apellido_cliente'),
+                    email_cliente=body.get('email_cliente'),
+                    opcion_entrega=body.get('opcion_entrega'),
+                    region=body.get('region'),
+                    comuna=body.get('comuna'),
+                    calle=body.get('calle'),
+                    celular=body.get('celular'),
+                    descuento=body.get('descuento', 0.0),
+                    valor_total=body.get('valor_total'),
+                    estado=body.get('estado', 'pendiente'),
+                    usuario=usuario,  # Será None si no se envía
+                    tokenWebpay=body.get('tokenWebpay'),
+                )
+                productos_guardados = []
+                # Guardar los productos asociados a la venta
+                for producto_data in body.get('productos', []):
+                    producto = Productos.objects.get(id=producto_data['id'])
+
+                    # Validar stock
+                    if producto.cantidad < producto_data['cantidad']:
+                        raise ValueError(f"Stock insuficiente para el producto {producto.nombre}.")
+
+                    # Crear relación ProductoVenta
+                    producto_venta = ProductoVenta.objects.create(
+                        venta=venta,
+                        producto=producto,
+                        cantidad=producto_data['cantidad']
+                    )
+                    productos_guardados.append(producto_venta)
+
+                    # Actualizar el stock del producto
+                    producto.cantidad -= producto_data['cantidad']
+                    producto.save()
+                       # Enviar correo con el resumen de la venta
+
+                enviar_resumen_venta(venta, productos_guardados)
+            return JsonResponse({"status": "success", "venta_id": venta.id, "mensaje": "Venta guardada exitosamente."}, status=201)
+
+        except Productos.DoesNotExist:
+            return JsonResponse({"status": "error", "mensaje": "Producto no encontrado."}, status=404)
+        except ValueError as e:
+            return JsonResponse({"status": "error", "mensaje": str(e)}, status=400)
+        except Exception as e:
+            return JsonResponse({"status": "error", "mensaje": f"Error al procesar la venta: {str(e)}"}, status=500)
+
+def obtener_url_absoluta_sin_request(ruta_relativa):
+    """
+    Construye una URL absoluta sin necesidad del objeto `request`.
+    """
+    base_url = getattr(settings, 'SITE_URL', 'http://127.0.0.1:8000')
+    if not ruta_relativa.startswith('/'):
+        ruta_relativa = '/' + ruta_relativa
+    return base_url + ruta_relativa
+def enviar_resumen_venta(venta, productos):
+    """
+    Envía un correo con el resumen de la venta al cliente.
+    :param venta: Objeto de la venta
+    :param productos: Lista de productos asociados
+    """
+    # HTML para el correo
+    correo_html = f"""
+    <html>
+    <body style="font-family: Arial, sans-serif; text-align: center; background-color: #f9f9f9; padding: 20px;">
+        <div style="max-width: 600px; margin: auto; background-color: #ffffff; border-radius: 8px; box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.1); padding: 20px;">
+            <img src="https://i.ibb.co/FzPs1mR/logo.png" width="80">
+            <h2 style="color: #333;">Resumen de tu Compra</h2>
+            <p style="color: #555;">¡Gracias por tu compra, {venta.nombre_cliente}!</p>
+            <div style="text-align: left; margin-top: 20px;">
+                <p><strong>Código de Venta:</strong> {venta.codigo}</p>
+                <p><strong>Fecha:</strong> {venta.fecha.strftime('%d-%m-%Y %H:%M')}</p>
+                <p><strong>Estado:</strong> EN PROCESO DE COMPROBACIÓN</p>
+                <p><strong>Total Pagado:</strong> ${venta.valor_total}</p>
+                <h3 style="color: #333;">Productos:</h3>
+                <ul style="list-style: none; padding: 0;">
+    """
+
+    # Agregar los productos al correo
+    for producto in productos:
+        url_imagen = obtener_url_absoluta_sin_request( producto.producto.imagen.url)
+        correo_html += f"""
+        <li style="margin-bottom: 10px; padding: 10px; background-color: #f1f1f1; border-radius: 4px;">
+            <div style="display: flex; align-items: center; gap: 10px;">
+                <img src="{url_imagen}" width="60">
+                <div>
+                    <p><strong>{producto.producto.nombre}</strong></p>
+                    <p>Precio Unitario: ${producto.producto.precio}</p>
+                    <p>Cantidad: {producto.cantidad}</p>
+                    <p><strong>Total: ${producto.cantidad * producto.producto.precio}</strong></p>
+                </div>
+            </div>
+        </li>
+        <hr>
+        """
+
+
+    # Cerrar el HTML
+    correo_html += """
+                </ul>
+            </div>
+            <p style="margin-top: 20px; color: #555;">Recibiras mas actualizaciones como esté  cuando el estado de tu compra cambie.</p>
+            <p style="margin-top: 20px; color: #555;">Gracias por confiar en nosotros.</p>
+        </div>
+    </body>
+    </html>
+    """
+
+    # Enviar el correo
+    try:
+        send_mail(
+            subject=f'Resumen de tu compra - {venta.codigo}',
+            message='',  # Se deja vacío porque usamos html_message
+            from_email='tomi.latin.99@gmail.com',  # Cambiar al correo configurado
+            recipient_list=[venta.email_cliente],
+            html_message=correo_html,
+            fail_silently=False,
+        )
+        print("Correo enviado exitosamente.")
+    except Exception as e:
+        print(f"Error al enviar el correo: {e}")

@@ -39,10 +39,15 @@ class Venta(models.Model):
     nombre_cliente = models.CharField(max_length=255, verbose_name="Nombre del cliente")
     apellido_cliente = models.CharField(max_length=255, verbose_name="Apellido del cliente")
     email_cliente = models.EmailField(max_length=255, verbose_name="Email del cliente")
-    email_cliente = models.EmailField(max_length=255, verbose_name="Email del cliente")
-    descuento = models.DecimalField(max_digits=10, decimal_places=2, default=0.00, verbose_name="Descuento aplicado")
+    opcion_entrega = models.CharField(max_length=255)
+    region = models.CharField(max_length=255, blank=True)
+    comuna = models.CharField(max_length=255, blank=True)
+    calle = models.CharField(max_length=255, blank=True)
+    celular = models.CharField(max_length=255, blank=True)
+    descuento = models.DecimalField(max_digits=10, decimal_places=2, default=0.00, blank=True, verbose_name="Descuento aplicado")
     valor_total = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="Valor total de la venta")
     estado = models.CharField(default='Pendiente', max_length=255)
+    tokenWebpay = models.TextField(null=True)
 
     usuario = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Usuario asociado")
 
@@ -67,11 +72,10 @@ class ProductoVenta(models.Model):
         verbose_name_plural = 'Productos en Venta'
 
     def __str__(self):
-        return f"{self.producto.nombre} x{self.cantidad} - Venta {self.venta.codigo}"
+        return f"{self.producto.nombre} - Venta {self.venta.codigo}"
 
 
 class TransaccionWebpay(models.Model):
-    venta = models.OneToOneField(Venta, on_delete=models.CASCADE, verbose_name="Venta asociada")
     token = models.CharField(max_length=255, verbose_name="Token de la transacción")
     fecha_transaccion = models.DateTimeField(auto_now_add=True, verbose_name="Fecha de la transacción")
     estado = models.CharField(
@@ -92,11 +96,11 @@ class TransaccionWebpay(models.Model):
     
 class UserProfile(models.Model):
     usuario = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
+    rut = models.CharField(max_length=15, blank=True, null=True)
     celular = models.CharField(max_length=15, blank=True, null=True)
     region = models.TextField(blank=True, null=True)
     comuna = models.TextField(blank=True, null=True)
     calle = models.TextField(blank=True, null=True)
-
     class Meta:
         db_table = 'perfil_usuario'
 
@@ -104,11 +108,13 @@ class UserProfile(models.Model):
         return self.user.username
     
 class Soporte(models.Model):
+    codigo = models.CharField(max_length=255, unique=True)
     nombre = models.CharField(max_length=255)
     correo_electronico = models.EmailField()
     motivo = models.CharField(max_length=255)
     mensaje = models.TextField()
     estado = models.CharField(max_length=50)
+
 
     class Meta:
         db_table = 'soporte'

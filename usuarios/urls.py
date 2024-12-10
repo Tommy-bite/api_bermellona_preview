@@ -1,11 +1,12 @@
 from django.urls import include, path
-from .views import ConfirmarPagoView, GoogleAuthView, SoporteViewSet,IniciarPagoView, PasswordResetRequestView, ProductoViewSet, RegistroUsuario, ToggleUserStatusView, UserListView, activate_account, LoginView, UserProfileView, PasswordResetView, PasswordResetConfirmView, csrf_view
+from .views import ConfirmarPagoView, GoogleAuthView, UserProfileDetailView, GuardarVentaView,TransaccionWebpayViewSet,SoporteViewSet,IniciarPagoView, PasswordResetRequestView, ProductoViewSet, RegistroUsuario, ToggleUserStatusView, UserListView, activate_account, LoginView, UserProfileView, PasswordResetView, PasswordResetConfirmView, csrf_view
 from rest_framework.routers import DefaultRouter
 
 
 router = DefaultRouter()
 router.register(r'productos', ProductoViewSet, basename='producto')
 router.register(r'soporte', SoporteViewSet, basename='soporte')
+router.register(r'transaccion-webpay', TransaccionWebpayViewSet, basename='transaccion')
 
 urlpatterns = [
     path('', include(router.urls)),
@@ -22,5 +23,7 @@ urlpatterns = [
     path('toggle-user-status/', ToggleUserStatusView.as_view(), name='toggle-user-status'),
     path('password-reset-request/', PasswordResetRequestView.as_view(), name='password-reset-request'),
     path('auth/google/', GoogleAuthView.as_view(), name='google-auth'),
+    path('user-profile/<int:user_id>/', UserProfileDetailView.as_view(), name='user-profile-detail'),
+    path('guardar-venta/', GuardarVentaView.as_view(), name='guardar-eventa'),
 
 ]
